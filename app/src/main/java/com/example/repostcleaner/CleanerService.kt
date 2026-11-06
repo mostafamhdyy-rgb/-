@@ -94,8 +94,8 @@ class CleanerService : AccessibilityService() {
         status = message
     }
 
-    private fun schedule() {
-        if (running) handler.postDelayed(tick, Random.nextLong(1400, 2600))
+    private fun schedule(minMs: Long = 350, maxMs: Long = 650) {
+        if (running) handler.postDelayed(tick, Random.nextLong(minMs, maxMs))
     }
 
     private fun doStep() {
@@ -141,7 +141,7 @@ class CleanerService : AccessibilityService() {
                 val y = cell?.exactCenterY() ?: (m.heightPixels * GRID_Y)
                 step = Step.SHARE
                 tries = 0
-                tap(x, y) { schedule() }
+                tap(x, y) { schedule(900, 1300) }
             }
             Step.SHARE -> {
                 val share = find(root, SHARE_WORDS)
@@ -150,14 +150,16 @@ class CleanerService : AccessibilityService() {
                     status = "فتح قائمة المشاركة"
                     step = Step.REMOVE
                     tries = 0
-                } else if (++tries >= 3) {
+                    schedule(700, 1000)
+                    return
+                } else if (++tries >= 6) {
                     fail("مش لاقي زرار المشاركة")
                     return
                 }
                 schedule()
             }
             Step.REMOVE -> {
-                val remove = find(root, REMOVE_WORDS)
+                val remove = find(root, REMOVE_WORDS) ?: if (tries >= 2) findGenericRepost(root) else null
                 if (remove != null) {
                     val title = captureTitle(root)
                     click(remove)
@@ -172,9 +174,13 @@ class CleanerService : AccessibilityService() {
                     }
                     goBack()
                     step = Step.OPEN
-                } else if (++tries >= 3) {
+                    schedule(800, 1100)
+                    return
+                } else if (++tries >= 7) {
                     fail("مش لاقي زرار إزالة إعادة النشر")
                     return
+                } else {
+                    scrollSheet(root, tries)
                 }
                 schedule()
             }
@@ -193,6 +199,30 @@ class CleanerService : AccessibilityService() {
         }
         walk(root)
         return found.joinToString(" · ").take(90).ifEmpty { "فيديو" }
+    }
+
+    private fun findGenericRepost(root: AccessibilityNodeInfo): AccessibilityNodeInfo? =
+        find(root, listOf("repost", "ريبوست", "إعادة النشر", "إعادة نشر"))
+
+    /** The share sheet's action row scrolls sideways; nudge it so hidden buttons appear. */
+    private fun scrollSheet(root: AccessibilityNodeInfo, n: Int) {
+        val h = resources.displayMetrics.heightPixels
+        fun walk(x: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            if (x == null) return null
+            val r = Rect()
+            x.getBoundsInScreen(r)
+            if (x.isScrollable && r.top > h * 0.4f) return x
+            for (i in 0 until x.childCount) {
+                val f = walk(x.getChild(i))
+                if (f != null) return f
+            }
+            return null
+        }
+        val s = walk(root) ?: return
+        s.performAction(
+            if (n % 2 == 0) AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+            else AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        )
     }
 
     private fun isTikTok(pkg: String): Boolean {
@@ -284,11 +314,12 @@ class CleanerService : AccessibilityService() {
             val id = n.viewIdResourceName.orEmpty()
             val r = Rect()
             n.getBoundsInScreen(r)
-            if (t.isNotEmpty() || d.isNotEmpty() || n.isClickable) {
+            if (t.isNotEmpty() || d.isNotEmpty() || n.isClickable || n.isScrollable) {
                 sb.append("  ".repeat(depth))
                     .append(n.className).append(" | id=").append(id)
                     .append(" | text=").append(t).append(" | desc=").append(d)
                     .append(" | clickable=").append(n.isClickable)
+                    .append(" | scrollable=").append(n.isScrollable)
                     .append(" | bounds=").append(r.toShortString()).append('\n')
             }
             for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
