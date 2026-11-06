@@ -34,6 +34,7 @@ class CleanerService : AccessibilityService() {
         val TAB_WORDS = listOf("reposts", "repost", "إعادات النشر", "إعادة النشر", "المعاد نشرها")
         val SHARE_WORDS = listOf("share", "مشاركة")
         val REMOVE_WORDS = listOf(
+            "حذف إعادة النشر", "حذف إعادة", "delete repost",
             "remove repost", "remove from reposts", "undo repost",
             "إزالة إعادة النشر", "إلغاء إعادة النشر", "إزالة المشاركة"
         )
