@@ -2,10 +2,12 @@ package com.example.repostcleaner
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Context
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlin.random.Random
@@ -25,6 +27,8 @@ class CleanerService : AccessibilityService() {
         @Volatile var removed = 0
         @Volatile var status = "جاهز"
         @Volatile var lastFailDump = ""
+        @Volatile var startedAt = 0L
+        @Volatile var endedAt = 0L
         private val log = ArrayList<String>()
         fun recent(): String = synchronized(log) { log.takeLast(40).reversed().joinToString("\n") }
         fun addLog(line: String) = synchronized(log) { log.add(line) }
@@ -44,7 +48,7 @@ class CleanerService : AccessibilityService() {
         const val GRID_X = 0.5f
         const val GRID_Y = 0.58f
 
-        const val MAX_FAILURES = 4
+        const val MAX_FAILURES = 8
     }
 
     private enum class Step { TAB, OPEN, SHARE, REMOVE }
@@ -57,6 +61,28 @@ class CleanerService : AccessibilityService() {
     private var limit = 500
     private var gridDetected = false
     private var gridMisses = 0
+    private var skip = 0
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    @Suppress("DEPRECATION")
+    private fun holdScreen() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            releaseScreen()
+            wakeLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE,
+                "repostcleaner:run"
+            ).also { it.acquire(90 * 60 * 1000L) }
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun releaseScreen() {
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (e: Exception) {
+        }
+    }
 
     override fun onServiceConnected() {
         instance = this
@@ -81,21 +107,27 @@ class CleanerService : AccessibilityService() {
         clearLog()
         gridDetected = false
         gridMisses = 0
+        skip = 0
         failures = 0
         tries = 0
         step = Step.TAB
+        startedAt = System.currentTimeMillis()
+        endedAt = 0L
+        holdScreen()
         running = true
         status = "شغّال… افتح تيك توك على بروفايلك"
         schedule()
     }
 
     fun stopWork(message: String) {
+        if (running) endedAt = System.currentTimeMillis()
+        releaseScreen()
         running = false
         handler.removeCallbacks(tick)
         status = message
     }
 
-    private fun schedule(minMs: Long = 350, maxMs: Long = 650) {
+    private fun schedule(minMs: Long = 250, maxMs: Long = 450) {
         if (running) handler.postDelayed(tick, Random.nextLong(minMs, maxMs))
     }
 
@@ -122,27 +154,37 @@ class CleanerService : AccessibilityService() {
             }
             Step.OPEN -> {
                 val m = resources.displayMetrics
-                val cell = firstGridCell(root)
-                if (cell != null) {
+                val cells = gridCells(root)
+                val cell = cells.getOrNull(skip)
+                if (cells.isNotEmpty()) {
                     gridDetected = true
                     gridMisses = 0
+                    if (cell == null) {
+                        stopWork("وقفت: الفيديوهات الظاهرة كلها مش بتفتح ($removed اتشالت)")
+                        return
+                    }
                 } else if (gridDetected) {
-                    // not on the grid: either a video/sheet is still open, or the list is empty
-                    if (++gridMisses <= 2) {
+                    // not on the grid: wait for it, go back if it still does not show, give up after a while
+                    gridMisses++
+                    if (gridMisses > 5) {
+                        stopWork("خلصنا: تمت إزالة $removed (مفيش فيديوهات تانية ظاهرة)")
+                        return
+                    }
+                    if (gridMisses % 2 == 0) {
                         status = "رجوع للشبكة"
                         goBack()
-                        schedule()
                     } else {
-                        stopWork("خلصنا: تمت إزالة $removed (مفيش فيديوهات تانية ظاهرة)")
+                        status = "بستنى الشبكة"
                     }
+                    schedule(500, 800)
                     return
                 }
-                status = "فتح أول فيديو"
+                status = if (skip > 0) "تخطي فيديو مش بيفتح" else "فتح أول فيديو"
                 val x = cell?.exactCenterX() ?: (m.widthPixels * GRID_X)
                 val y = cell?.exactCenterY() ?: (m.heightPixels * GRID_Y)
                 step = Step.SHARE
                 tries = 0
-                tap(x, y) { schedule(900, 1300) }
+                tap(x, y) { schedule(700, 1000) }
             }
             Step.SHARE -> {
                 val share = find(root, SHARE_WORDS)
@@ -151,9 +193,9 @@ class CleanerService : AccessibilityService() {
                     status = "فتح قائمة المشاركة"
                     step = Step.REMOVE
                     tries = 0
-                    schedule(700, 1000)
+                    schedule(550, 800)
                     return
-                } else if (++tries >= 6) {
+                } else if (++tries >= 8) {
                     fail("مش لاقي زرار المشاركة")
                     return
                 }
@@ -167,6 +209,7 @@ class CleanerService : AccessibilityService() {
                     removed++
                     addLog("$removed. $title")
                     failures = 0
+                    skip = 0
                     status = "تمت إزالة $removed"
                     if (removed >= limit) {
                         goBack()
@@ -175,7 +218,7 @@ class CleanerService : AccessibilityService() {
                     }
                     goBack()
                     step = Step.OPEN
-                    schedule(800, 1100)
+                    schedule(600, 850)
                     return
                 } else if (++tries >= 7) {
                     fail("مش لاقي زرار إزالة إعادة النشر")
@@ -231,12 +274,12 @@ class CleanerService : AccessibilityService() {
         return p.contains("musically") || p.contains("trill") || p.contains("tiktok")
     }
 
-    /** Top-most, left-most portrait tile about a third of the screen wide: the first video of the grid. */
-    private fun firstGridCell(root: AccessibilityNodeInfo): Rect? {
+    /** Portrait tiles about a third of the screen wide, in reading order: the videos of the grid. */
+    private fun gridCells(root: AccessibilityNodeInfo): List<Rect> {
         val m = resources.displayMetrics
         val minW = (m.widthPixels * 0.25f).toInt()
         val maxW = (m.widthPixels * 0.40f).toInt()
-        var best: Rect? = null
+        val found = ArrayList<Rect>()
         fun walk(n: AccessibilityNodeInfo?) {
             if (n == null) return
             val r = Rect()
@@ -244,18 +287,18 @@ class CleanerService : AccessibilityService() {
             if (r.width() in minW..maxW && r.height() > r.width() &&
                 r.top > m.heightPixels * 0.30f && (n.isClickable || n.isLongClickable)
             ) {
-                val b = best
-                if (b == null || r.top < b.top || (r.top == b.top && r.left < b.left)) best = r
+                found.add(r)
             }
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
         walk(root)
-        return best
+        return found.sortedWith(compareBy({ it.top }, { it.left }))
     }
 
     private fun fail(reason: String) {
         lastFailDump = "FAILED: $reason (step=$step)\n" + dumpScreen()
         failures++
+        skip++
         goBack()
         goBack()
         if (failures >= MAX_FAILURES) {
