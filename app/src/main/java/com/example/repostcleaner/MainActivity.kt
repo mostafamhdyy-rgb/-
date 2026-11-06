@@ -80,19 +80,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val stop = button("إيقاف") { CleanerService.instance?.stopWork("اتوقف يدوياً") }
-        val diag = button("نسخ شاشة التشخيص (افتح الشاشة في تيك توك قبلها)") {
+        val diag = button("نسخ شاشة التشخيص (بعد الضغط افتح تيك توك، 10 ثواني)") {
             val svc = CleanerService.instance
             if (svc == null) {
                 Toast.makeText(this, "الخدمة مش متفعلة", Toast.LENGTH_SHORT).show()
             } else {
                 // dump what is on screen after a short delay so TikTok is in front
-                Toast.makeText(this, "افتح تيك توك، هيتنسخ بعد 5 ثواني", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "افتح تيك توك دلوقتي وخليه قدامك، هيتنسخ بعد 10 ثواني", Toast.LENGTH_LONG).show()
                 handler.postDelayed({
                     val text = svc.dumpScreen()
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     cm.setPrimaryClip(ClipData.newPlainText("dump", text))
                     dump.text = text.take(3000)
-                }, 5000)
+                }, 10000)
             }
         }
 

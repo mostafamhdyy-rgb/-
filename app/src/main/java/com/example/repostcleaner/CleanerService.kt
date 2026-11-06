@@ -89,8 +89,9 @@ class CleanerService : AccessibilityService() {
     private fun doStep() {
         if (!running) return
         val root = rootInActiveWindow
-        if (root == null) {
-            status = "افتح تيك توك وروح لبروفايلك"
+        val pkg = root?.packageName?.toString()
+        if (root == null || pkg == null || !isTikTok(pkg)) {
+            status = "افتح تيك توك على بروفايلك (الشاشة الحالية: ${pkg ?: "؟"})"
             schedule()
             return
         }
@@ -143,6 +144,11 @@ class CleanerService : AccessibilityService() {
                 schedule()
             }
         }
+    }
+
+    private fun isTikTok(pkg: String): Boolean {
+        val p = pkg.lowercase()
+        return p.contains("musically") || p.contains("trill") || p.contains("tiktok")
     }
 
     private fun fail(reason: String) {
@@ -198,6 +204,7 @@ class CleanerService : AccessibilityService() {
     fun dumpScreen(): String {
         val root = rootInActiveWindow ?: return "مفيش شاشة متاحة. افتح تيك توك الأول."
         val sb = StringBuilder("package=${root.packageName}\n")
+        windows.forEach { sb.append("window: pkg=${it.root?.packageName} type=${it.type} title=${it.title}\n") }
         fun walk(n: AccessibilityNodeInfo?, depth: Int) {
             if (n == null) return
             val t = n.text?.toString().orEmpty()

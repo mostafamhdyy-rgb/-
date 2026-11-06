@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">منظّف الريبوستات</string>
-    <string name="service_description">يضغط بدلاً منك على إزالة إعادة النشر داخل تيك توك، في حسابك أنت فقط، ولا يقرأ أي شيء خارج تيك توك.</string>
+    <string name="service_description">يضغط بدلاً منك على إزالة إعادة النشر داخل تيك توك، في حسابك أنت فقط، ويتجاهل أي تطبيق غير تيك توك أثناء التنظيف.</string>
 </resources>
