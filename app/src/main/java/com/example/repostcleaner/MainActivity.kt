@@ -42,6 +42,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var enable: Button
     private lateinit var logView: TextView
     private lateinit var dump: TextView
+    private var batch = 50
+    private var chips: List<Pair<Int, TextView>> = emptyList()
 
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
@@ -54,6 +56,10 @@ class MainActivity : AppCompatActivity() {
             primary.text = if (running) "إيقاف" else "إزالة كل إعادات النشر"
             primary.background = round(if (running) danger else accent, 28)
             bar.visibility = if (running) View.VISIBLE else View.INVISIBLE
+            chips.forEach { (n, tv) ->
+                tv.background = round(if (n == batch) accent else card, 20)
+                tv.setTextColor(if (n == batch) Color.WHITE else muted)
+            }
             logView.text = CleanerService.recent().ifEmpty { "هنا هتظهر الفيديوهات اللي اتشالت" }
 
             val start = CleanerService.startedAt
@@ -147,6 +153,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        batch = getSharedPreferences("p", MODE_PRIVATE).getInt("batch", 50)
+        val batchLabel = label("حجم الدفعة (بعد كل دفعة راحة 45 ثانية)", 12f, muted)
+        batchLabel.setPadding(0, dp(16), 0, dp(6))
+        val chipsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        chips = listOf(25, 50, 100).map { n ->
+            val tv = label("$n", 15f, muted, true).apply {
+                setPadding(dp(24), dp(8), dp(24), dp(8))
+                setOnClickListener {
+                    batch = n
+                    getSharedPreferences("p", MODE_PRIVATE).edit().putInt("batch", n).apply()
+                }
+            }
+            chipsRow.addView(tv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(6)
+                marginEnd = dp(6)
+            })
+            n to tv
+        }
+
         primary = bigButton("إزالة كل إعادات النشر", accent) {
             val svc = CleanerService.instance
             if (CleanerService.running) {
@@ -156,6 +184,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val name = user.text.toString().trim().removePrefix("@")
                 getSharedPreferences("p", MODE_PRIVATE).edit().putString("user", name).apply()
+                CleanerService.batch = batch
                 svc.begin(5000)
                 openTikTok(name)
             }
@@ -199,7 +228,7 @@ class MainActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
 
-        listOf(title, counter, sub, stats, bar, status, user, primary, enable, logView, lastFail, diag, note, dump)
+        listOf(title, counter, sub, stats, bar, status, user, batchLabel, chipsRow, primary, enable, logView, lastFail, diag, note, dump)
             .forEach { col.addView(it) }
         setContentView(ScrollView(this).apply {
             setBackgroundColor(bg)

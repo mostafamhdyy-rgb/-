@@ -28,6 +28,7 @@ class CleanerService : AccessibilityService() {
         @Volatile var status = "جاهز"
         @Volatile var lastFailDump = ""
         @Volatile var startedAt = 0L
+        @Volatile var batch = 50
         @Volatile var endedAt = 0L
         private val log = ArrayList<String>()
         fun recent(): String = synchronized(log) { log.takeLast(40).reversed().joinToString("\n") }
@@ -49,6 +50,7 @@ class CleanerService : AccessibilityService() {
         const val GRID_Y = 0.58f
 
         const val MAX_FAILURES = 8
+        const val REST_MS = 45_000L
     }
 
     private enum class Step { TAB, OPEN, SHARE, REMOVE }
@@ -218,7 +220,12 @@ class CleanerService : AccessibilityService() {
                     }
                     goBack()
                     step = Step.OPEN
-                    schedule(600, 850)
+                    if (batch > 0 && removed % batch == 0) {
+                        status = "خلصت دفعة ($removed). راحة ${REST_MS / 1000} ثانية وبكمّل"
+                        schedule(REST_MS, REST_MS + 3000)
+                    } else {
+                        schedule(600, 850)
+                    }
                     return
                 } else if (++tries >= 7) {
                     fail("مش لاقي زرار إزالة إعادة النشر")
