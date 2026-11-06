@@ -23,6 +23,10 @@ class CleanerService : AccessibilityService() {
         @Volatile var running = false
         @Volatile var removed = 0
         @Volatile var status = "جاهز"
+        private val log = ArrayList<String>()
+        fun recent(): String = synchronized(log) { log.takeLast(40).reversed().joinToString("\n") }
+        fun addLog(line: String) = synchronized(log) { log.add(line) }
+        fun clearLog() = synchronized(log) { log.clear() }
 
         // words matched (case-insensitive, "contains") against node text and contentDescription
         val TAB_WORDS = listOf("reposts", "repost", "إعادات النشر", "إعادة النشر", "المعاد نشرها")
@@ -68,6 +72,7 @@ class CleanerService : AccessibilityService() {
         handler.removeCallbacks(tick)
         limit = maxCount
         removed = 0
+        clearLog()
         failures = 0
         tries = 0
         step = Step.TAB
@@ -126,8 +131,10 @@ class CleanerService : AccessibilityService() {
             Step.REMOVE -> {
                 val remove = find(root, REMOVE_WORDS)
                 if (remove != null) {
+                    val title = captureTitle(root)
                     click(remove)
                     removed++
+                    addLog("$removed. $title")
                     failures = 0
                     status = "تمت إزالة $removed"
                     if (removed >= limit) {
@@ -144,6 +151,20 @@ class CleanerService : AccessibilityService() {
                 schedule()
             }
         }
+    }
+
+    /** First couple of readable texts on the video screen, used as a label in the log. */
+    private fun captureTitle(root: AccessibilityNodeInfo): String {
+        val skip = SHARE_WORDS + REMOVE_WORDS + TAB_WORDS
+        val found = ArrayList<String>()
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null || found.size >= 2) return
+            val t = n.text?.toString()?.trim().orEmpty()
+            if (t.length in 4..120 && skip.none { t.lowercase().contains(it.lowercase()) }) found.add(t)
+            for (i in 0 until n.childCount) walk(n.getChild(i))
+        }
+        walk(root)
+        return found.joinToString(" · ").take(90).ifEmpty { "فيديو" }
     }
 
     private fun isTikTok(pkg: String): Boolean {
