@@ -54,6 +54,8 @@ class CleanerService : AccessibilityService() {
     private var tries = 0
     private var failures = 0
     private var limit = 500
+    private var gridDetected = false
+    private var gridMisses = 0
 
     override fun onServiceConnected() {
         instance = this
@@ -76,6 +78,8 @@ class CleanerService : AccessibilityService() {
         limit = maxCount
         removed = 0
         clearLog()
+        gridDetected = false
+        gridMisses = 0
         failures = 0
         tries = 0
         step = Step.TAB
@@ -99,6 +103,10 @@ class CleanerService : AccessibilityService() {
         val root = rootInActiveWindow
         val pkg = root?.packageName?.toString()
         if (root == null || pkg == null || !isTikTok(pkg)) {
+            if (gridDetected && removed > 0) {
+                stopWork("خلصنا: تمت إزالة $removed")
+                return
+            }
             status = "افتح تيك توك على بروفايلك (الشاشة الحالية: ${pkg ?: "؟"})"
             schedule()
             return
@@ -112,9 +120,23 @@ class CleanerService : AccessibilityService() {
                 schedule()
             }
             Step.OPEN -> {
-                status = "فتح أول فيديو"
                 val m = resources.displayMetrics
                 val cell = firstGridCell(root)
+                if (cell != null) {
+                    gridDetected = true
+                    gridMisses = 0
+                } else if (gridDetected) {
+                    // not on the grid: either a video/sheet is still open, or the list is empty
+                    if (++gridMisses <= 2) {
+                        status = "رجوع للشبكة"
+                        goBack()
+                        schedule()
+                    } else {
+                        stopWork("خلصنا: تمت إزالة $removed (مفيش فيديوهات تانية ظاهرة)")
+                    }
+                    return
+                }
+                status = "فتح أول فيديو"
                 val x = cell?.exactCenterX() ?: (m.widthPixels * GRID_X)
                 val y = cell?.exactCenterY() ?: (m.heightPixels * GRID_Y)
                 step = Step.SHARE
