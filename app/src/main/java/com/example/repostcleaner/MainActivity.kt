@@ -110,6 +110,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val lastFail = button("نسخ تقرير آخر فشل") {
+            val text = CleanerService.lastFailDump.ifEmpty { "مفيش فشل متسجل لسه" }
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("fail", text))
+            dump.text = text.take(3000)
+            Toast.makeText(this, "اتنسخ، الصقه في المحادثة", Toast.LENGTH_SHORT).show()
+        }
+
         val note = TextView(this).apply {
             text = "يعمل على حسابك أنت فقط، وبيضغط على الشاشة زي ما تعمل بإيدك. استخدامه ممكن يخالف شروط تيك توك، فاستخدمه على مسؤوليتك."
             textSize = 12f
@@ -121,7 +129,7 @@ class MainActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
 
-        listOf(counter, label, status, enable, user, start, stop, logView, diag, note, dump).forEach { col.addView(it) }
+        listOf(counter, label, status, enable, user, start, stop, logView, lastFail, diag, note, dump).forEach { col.addView(it) }
         setContentView(ScrollView(this).apply { addView(col) })
     }
 

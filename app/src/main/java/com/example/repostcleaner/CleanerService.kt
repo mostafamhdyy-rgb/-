@@ -3,6 +3,7 @@ package com.example.repostcleaner
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -23,6 +24,7 @@ class CleanerService : AccessibilityService() {
         @Volatile var running = false
         @Volatile var removed = 0
         @Volatile var status = "جاهز"
+        @Volatile var lastFailDump = ""
         private val log = ArrayList<String>()
         fun recent(): String = synchronized(log) { log.takeLast(40).reversed().joinToString("\n") }
         fun addLog(line: String) = synchronized(log) { log.add(line) }
@@ -37,8 +39,9 @@ class CleanerService : AccessibilityService() {
         )
 
         // where the first video of the grid sits, as a fraction of the screen
-        const val GRID_X = 0.18f
-        const val GRID_Y = 0.45f
+        // fallback only, used when no grid cell is found in the accessibility tree
+        const val GRID_X = 0.5f
+        const val GRID_Y = 0.58f
 
         const val MAX_FAILURES = 4
     }
@@ -111,9 +114,12 @@ class CleanerService : AccessibilityService() {
             Step.OPEN -> {
                 status = "فتح أول فيديو"
                 val m = resources.displayMetrics
+                val cell = firstGridCell(root)
+                val x = cell?.exactCenterX() ?: (m.widthPixels * GRID_X)
+                val y = cell?.exactCenterY() ?: (m.heightPixels * GRID_Y)
                 step = Step.SHARE
                 tries = 0
-                tap(m.widthPixels * GRID_X, m.heightPixels * GRID_Y) { schedule() }
+                tap(x, y) { schedule() }
             }
             Step.SHARE -> {
                 val share = find(root, SHARE_WORDS)
@@ -172,7 +178,30 @@ class CleanerService : AccessibilityService() {
         return p.contains("musically") || p.contains("trill") || p.contains("tiktok")
     }
 
+    /** Top-most, left-most portrait tile about a third of the screen wide: the first video of the grid. */
+    private fun firstGridCell(root: AccessibilityNodeInfo): Rect? {
+        val m = resources.displayMetrics
+        val minW = (m.widthPixels * 0.25f).toInt()
+        val maxW = (m.widthPixels * 0.40f).toInt()
+        var best: Rect? = null
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null) return
+            val r = Rect()
+            n.getBoundsInScreen(r)
+            if (r.width() in minW..maxW && r.height() > r.width() &&
+                r.top > m.heightPixels * 0.30f && (n.isClickable || n.isLongClickable)
+            ) {
+                val b = best
+                if (b == null || r.top < b.top || (r.top == b.top && r.left < b.left)) best = r
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i))
+        }
+        walk(root)
+        return best
+    }
+
     private fun fail(reason: String) {
+        lastFailDump = "FAILED: $reason (step=$step)\n" + dumpScreen()
         failures++
         goBack()
         goBack()
@@ -231,11 +260,14 @@ class CleanerService : AccessibilityService() {
             val t = n.text?.toString().orEmpty()
             val d = n.contentDescription?.toString().orEmpty()
             val id = n.viewIdResourceName.orEmpty()
+            val r = Rect()
+            n.getBoundsInScreen(r)
             if (t.isNotEmpty() || d.isNotEmpty() || n.isClickable) {
                 sb.append("  ".repeat(depth))
                     .append(n.className).append(" | id=").append(id)
                     .append(" | text=").append(t).append(" | desc=").append(d)
-                    .append(" | clickable=").append(n.isClickable).append('\n')
+                    .append(" | clickable=").append(n.isClickable)
+                    .append(" | bounds=").append(r.toShortString()).append('\n')
             }
             for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
         }
