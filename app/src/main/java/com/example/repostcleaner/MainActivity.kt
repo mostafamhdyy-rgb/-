@@ -43,7 +43,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logView: TextView
     private lateinit var dump: TextView
     private var batch = 50
+    private var speed = 2
     private var chips: List<Pair<Int, TextView>> = emptyList()
+    private var speedChips: List<Pair<Int, TextView>> = emptyList()
 
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = object : Runnable {
@@ -59,6 +61,10 @@ class MainActivity : AppCompatActivity() {
             chips.forEach { (n, tv) ->
                 tv.background = round(if (n == batch) accent else card, 20)
                 tv.setTextColor(if (n == batch) Color.WHITE else muted)
+            }
+            speedChips.forEach { (n, tv) ->
+                tv.background = round(if (n == speed) accent else card, 20)
+                tv.setTextColor(if (n == speed) Color.WHITE else muted)
             }
             logView.text = CleanerService.recent().ifEmpty { "هنا هتظهر الفيديوهات اللي اتشالت" }
 
@@ -175,6 +181,28 @@ class MainActivity : AppCompatActivity() {
             n to tv
         }
 
+        speed = getSharedPreferences("p", MODE_PRIVATE).getInt("speed", 2)
+        val speedLabel = label("السرعة (الأسرع ممكن يفوّت فيديوهات على موبايل بطيء)", 12f, muted)
+        speedLabel.setPadding(0, dp(12), 0, dp(6))
+        val speedRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        speedChips = listOf(1 to "عادي", 2 to "سريع", 3 to "أسرع").map { (n, name) ->
+            val tv = label(name, 15f, muted, true).apply {
+                setPadding(dp(20), dp(8), dp(20), dp(8))
+                setOnClickListener {
+                    speed = n
+                    getSharedPreferences("p", MODE_PRIVATE).edit().putInt("speed", n).apply()
+                }
+            }
+            speedRow.addView(tv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(6)
+                marginEnd = dp(6)
+            })
+            n to tv
+        }
+
         primary = bigButton("إزالة كل إعادات النشر", accent) {
             val svc = CleanerService.instance
             if (CleanerService.running) {
@@ -185,6 +213,7 @@ class MainActivity : AppCompatActivity() {
                 val name = user.text.toString().trim().removePrefix("@")
                 getSharedPreferences("p", MODE_PRIVATE).edit().putString("user", name).apply()
                 CleanerService.batch = batch
+                CleanerService.speed = speed
                 svc.begin(5000)
                 openTikTok(name)
             }
@@ -228,7 +257,7 @@ class MainActivity : AppCompatActivity() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
 
-        listOf(title, counter, sub, stats, bar, status, user, batchLabel, chipsRow, primary, enable, logView, lastFail, diag, note, dump)
+        listOf(title, counter, sub, stats, bar, status, user, batchLabel, chipsRow, speedLabel, speedRow, primary, enable, logView, lastFail, diag, note, dump)
             .forEach { col.addView(it) }
         setContentView(ScrollView(this).apply {
             setBackgroundColor(bg)

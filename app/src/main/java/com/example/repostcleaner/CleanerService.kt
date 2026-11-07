@@ -29,6 +29,7 @@ class CleanerService : AccessibilityService() {
         @Volatile var lastFailDump = ""
         @Volatile var startedAt = 0L
         @Volatile var batch = 50
+        @Volatile var speed = 1 // 1 = normal, 2 = fast, 3 = fastest
         @Volatile var endedAt = 0L
         private val log = ArrayList<String>()
         fun recent(): String = synchronized(log) { log.takeLast(40).reversed().joinToString("\n") }
@@ -129,8 +130,22 @@ class CleanerService : AccessibilityService() {
         status = message
     }
 
-    private fun schedule(minMs: Long = 250, maxMs: Long = 450) {
-        if (running) handler.postDelayed(tick, Random.nextLong(minMs, maxMs))
+    /** Delay multiplier for the chosen speed: smaller = shorter waits between steps. */
+    private fun factor(): Double = when (speed) {
+        3 -> 0.35
+        2 -> 0.55
+        else -> 1.0
+    }
+
+    /** Polling attempts scale up as delays shrink, so the total wait before giving up stays the same. */
+    private fun maxTries(n: Int): Int = (n / factor()).toInt()
+
+    private fun schedule(minMs: Long = 250, maxMs: Long = 450, scale: Boolean = true) {
+        if (!running) return
+        val k = if (scale) factor() else 1.0
+        val lo = (minMs * k).toLong().coerceAtLeast(80L)
+        val hi = (maxMs * k).toLong().coerceAtLeast(lo + 40L)
+        handler.postDelayed(tick, Random.nextLong(lo, hi))
     }
 
     private fun doStep() {
@@ -197,7 +212,7 @@ class CleanerService : AccessibilityService() {
                     tries = 0
                     schedule(550, 800)
                     return
-                } else if (++tries >= 8) {
+                } else if (++tries >= maxTries(8)) {
                     fail("مش لاقي زرار المشاركة")
                     return
                 }
@@ -222,12 +237,12 @@ class CleanerService : AccessibilityService() {
                     step = Step.OPEN
                     if (batch > 0 && removed % batch == 0) {
                         status = "خلصت دفعة ($removed). راحة ${REST_MS / 1000} ثانية وبكمّل"
-                        schedule(REST_MS, REST_MS + 3000)
+                        schedule(REST_MS, REST_MS + 3000, scale = false)
                     } else {
                         schedule(600, 850)
                     }
                     return
-                } else if (++tries >= 7) {
+                } else if (++tries >= maxTries(7)) {
                     fail("مش لاقي زرار إزالة إعادة النشر")
                     return
                 } else {
