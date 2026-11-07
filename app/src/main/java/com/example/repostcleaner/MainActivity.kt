@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var logView: TextView
     private lateinit var dump: TextView
     private var batch = 50
-    private var speed = 2
+    private var speed = 4
     private var chips: List<Pair<Int, TextView>> = emptyList()
     private var speedChips: List<Pair<Int, TextView>> = emptyList()
 
@@ -181,16 +181,16 @@ class MainActivity : AppCompatActivity() {
             n to tv
         }
 
-        speed = getSharedPreferences("p", MODE_PRIVATE).getInt("speed", 2)
+        speed = getSharedPreferences("p", MODE_PRIVATE).getInt("speed", 4)
         val speedLabel = label("السرعة (الأسرع ممكن يفوّت فيديوهات على موبايل بطيء)", 12f, muted)
         speedLabel.setPadding(0, dp(12), 0, dp(6))
         val speedRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        speedChips = listOf(1 to "عادي", 2 to "سريع", 3 to "أسرع").map { (n, name) ->
+        speedChips = listOf(1 to "عادي", 2 to "سريع", 3 to "أسرع", 4 to "أقصى").map { (n, name) ->
             val tv = label(name, 15f, muted, true).apply {
-                setPadding(dp(20), dp(8), dp(20), dp(8))
+                setPadding(dp(14), dp(8), dp(14), dp(8))
                 setOnClickListener {
                     speed = n
                     getSharedPreferences("p", MODE_PRIVATE).edit().putInt("speed", n).apply()

@@ -29,7 +29,7 @@ class CleanerService : AccessibilityService() {
         @Volatile var lastFailDump = ""
         @Volatile var startedAt = 0L
         @Volatile var batch = 50
-        @Volatile var speed = 1 // 1 = normal, 2 = fast, 3 = fastest
+        @Volatile var speed = 1 // 1 = normal, 2 = fast, 3 = faster, 4 = max
         @Volatile var endedAt = 0L
         private val log = ArrayList<String>()
         fun recent(): String = synchronized(log) { log.takeLast(40).reversed().joinToString("\n") }
@@ -132,6 +132,7 @@ class CleanerService : AccessibilityService() {
 
     /** Delay multiplier for the chosen speed: smaller = shorter waits between steps. */
     private fun factor(): Double = when (speed) {
+        4 -> 0.2
         3 -> 0.35
         2 -> 0.55
         else -> 1.0
