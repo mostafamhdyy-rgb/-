@@ -47,8 +47,8 @@ class CleanerService : AccessibilityService() {
 
         // where the first video of the grid sits, as a fraction of the screen
         // fallback only, used when no grid cell is found in the accessibility tree
-        const val GRID_X = 0.5f
-        const val GRID_Y = 0.58f
+        const val GRID_X = 0.83f // first tile sits on the right in an RTL (Arabic) profile
+        const val GRID_Y = 0.61f
 
         const val MAX_FAILURES = 8
         const val REST_MS = 45_000L
@@ -308,14 +308,17 @@ class CleanerService : AccessibilityService() {
             val r = Rect()
             n.getBoundsInScreen(r)
             if (r.width() in minW..maxW && r.height() > r.width() &&
-                r.top > m.heightPixels * 0.30f && (n.isClickable || n.isLongClickable)
+                r.top > m.heightPixels * 0.30f && r.bottom < m.heightPixels * 0.92f &&
+                found.none { it == r }
             ) {
-                found.add(r)
+                found.add(Rect(r))
             }
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
         walk(root)
-        return found.sortedWith(compareBy({ it.top }, { it.left }))
+        val rtl = resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL
+        return if (rtl) found.sortedWith(compareBy({ it.top }, { -it.left }))
+        else found.sortedWith(compareBy({ it.top }, { it.left }))
     }
 
     private fun fail(reason: String) {
